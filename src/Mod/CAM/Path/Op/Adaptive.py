@@ -654,30 +654,30 @@ def Execute(op, obj):
         # Takes all stock faces, projects to XY plane, and uses the external wire of that
         stockPaths = []
 
-        #Adapted from https://forum.freecad.org/viewtopic.php?t=69976
-        #project, create faces, merge, refine, re-export edges of result
+        # Adapted from https://forum.freecad.org/viewtopic.php?t=69976
+        # project, create faces, merge, refine, re-export edges of result
         shp = op.stock.Shape
-        #Project to XY plane
+        # Project to XY plane
         wires = [TechDraw.findShapeOutline(shp, 1, FreeCAD.Vector(0, 0, 1))]
-        #make the faces
+        # make the faces
         faces = [Part.makeFace(w, "Part::FaceMakerCheese") for w in wires]
-        #fuse the faces
-        fusion = faces[0].fuse(faces[1:]) #fuses the first face to the remaining faces in the list
-        #refine fusion object to remove extra edges
+        # fuse the faces
+        fusion = faces[0].fuse(faces[1:])  # fuses the first face to the remaining faces in the list
+        # refine fusion object to remove extra edges
         refined = fusion.removeSplitter()
         final_face = refined.Face1
         outer_wire = final_face.OuterWire
-        #Part.show(outer_wire,"outer_wire")
+        # Part.show(outer_wire,"outer_wire")
         v = []
         # Add segments- create vertexes for lines, discretize everything else
         for e in outer_wire.OrderedEdges:
             if e.Curve.TypeId == "Part::GeomLine":
-                #If we don't have anything yet, set starting point; odd behavior results if omitted
+                # If we don't have anything yet, set starting point; odd behavior results if omitted
                 if len(v) == 0:
                     v0 = e.Vertexes[0]
                     v.append(FreeCAD.Vector(v0.X, v0.Y, 0))
                 v.append(FreeCAD.Vector(e.Vertexes[1].X, e.Vertexes[1].Y, 0))
-            #NOTE: This handles single-closed-edge faces (eg, the top of a cylinder) and other non-line curves
+            # NOTE: This handles single-closed-edge faces (eg, the top of a cylinder) and other non-line curves
             else:
                 v += discretize(e)
         stockPaths.append([v])

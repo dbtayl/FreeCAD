@@ -652,8 +652,6 @@ def Execute(op, obj):
 
         # Find the edges of the stock and convert to a single (discretized) path
         # Takes all stock faces, projects to XY plane, and uses the external wire of that
-        stockPaths = []
-
         # Adapted from https://forum.freecad.org/viewtopic.php?t=69976
         # project, create faces, merge, refine, re-export edges of result
         shp = op.stock.Shape
@@ -668,19 +666,7 @@ def Execute(op, obj):
         final_face = refined.Face1
         outer_wire = final_face.OuterWire
         # Part.show(outer_wire,"outer_wire")
-        v = []
-        # Add segments- create vertexes for lines, discretize everything else
-        for e in outer_wire.OrderedEdges:
-            if e.Curve.TypeId == "Part::GeomLine":
-                # If we don't have anything yet, set starting point; odd behavior results if omitted
-                if len(v) == 0:
-                    v0 = e.Vertexes[0]
-                    v.append(FreeCAD.Vector(v0.X, v0.Y, 0))
-                v.append(FreeCAD.Vector(e.Vertexes[1].X, e.Vertexes[1].Y, 0))
-            # NOTE: This handles single-closed-edge faces (eg, the top of a cylinder) and other non-line curves
-            else:
-                v += discretize(e)
-        stockPaths.append([v])
+        stockPaths = [[outer_wire.discretize(QuasiDeflection=obj.Tolerance)]]
 
         stockPath2d = convertTo2d(stockPaths)
 

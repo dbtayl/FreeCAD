@@ -52,7 +52,8 @@ def activePartOrAssembly():
 def activeAssembly():
     active_assembly = activePartOrAssembly()
     if active_assembly is not None and active_assembly.isDerivedFrom("Assembly::AssemblyObject"):
-        return active_assembly
+        if active_assembly.ViewObject.isInEditMode():
+            return active_assembly
 
     return None
 
@@ -180,6 +181,40 @@ def isBodySubObject(typeId):
         or typeId == "PartDesign::Plane"
         or typeId == "PartDesign::CoordinateSystem"
     )
+
+
+def fixBodyExtraFeatureInSub(doc_name, sub_name):
+    # If the sub_name that comes in has extra features in it, remove them.
+    # For example :
+    # "Part.Body.Pad.Edge2" -> "Part.Body.Edge2"
+    # "Part.Body.Pad.Sketch." -> "Part.Body.Sketch."
+    # "Body.Pad.Sketch." -> "Body.sketch."
+    doc = App.getDocument(doc_name)
+    names = sub_name.split(".")
+    elt = names.pop()  # remove element
+
+    bodyPassed = False
+    new_sub_name = ""
+    for obj_name in names:
+        obj = doc.getObject(obj_name)
+        if obj is None:
+            return sub_name
+
+        if bodyPassed and obj.isDerivedFrom("PartDesign::Feature"):
+            continue  # we skip this name!
+
+        if isLink(obj):
+            obj = obj.getLinkedObject()
+            doc = obj.Document
+
+        if obj.TypeId == "PartDesign::Body":
+            bodyPassed = True
+
+        new_sub_name = new_sub_name + obj_name + "."
+
+    new_sub_name = new_sub_name + elt  # Put back the element name
+
+    return new_sub_name
 
 
 # Deprecated. Kept for migrationScript.

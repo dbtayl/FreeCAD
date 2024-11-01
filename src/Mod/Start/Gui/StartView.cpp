@@ -48,10 +48,8 @@
 #include <Base/Tools.h>
 #include <Gui/Application.h>
 #include <Gui/Command.h>
-#include <Gui/MainWindow.h>
 #include <Gui/Document.h>
-#include <Gui/Workbench.h>
-#include <Gui/FileDialog.h>
+#include <Gui/ModuleIO.h>
 #include <Gui/View3DInventor.h>
 #include <Gui/View3DInventorViewer.h>
 #include <gsl/pointers>
@@ -232,18 +230,6 @@ void StartView::configureNewFileButtons(QLayout* layout) const
                                  tr("Create an architectural project"),
                                  QLatin1String(":/icons/BIMWorkbench.svg")});
 
-    auto hGrp = App::GetApplication().GetParameterGroupByPath(
-        "User parameter:BaseApp/Preferences/Mod/Start");
-    if (hGrp->GetBool("FileCardUseStyleSheet", true)) {
-        QString style = fileCardStyle();
-        newEmptyFile->setStyleSheet(style);
-        openFile->setStyleSheet(style);
-        partDesign->setStyleSheet(style);
-        assembly->setStyleSheet(style);
-        draft->setStyleSheet(style);
-        arch->setStyleSheet(style);
-    }
-
     // TODO: Ensure all of the required WBs are actually available
     layout->addWidget(partDesign);
     layout->addWidget(assembly);
@@ -258,6 +244,17 @@ void StartView::configureNewFileButtons(QLayout* layout) const
     connect(assembly, &QPushButton::clicked, this, &StartView::newAssemblyFile);
     connect(draft, &QPushButton::clicked, this, &StartView::newDraftFile);
     connect(arch, &QPushButton::clicked, this, &StartView::newArchFile);
+}
+
+void StartView::paintEvent(QPaintEvent* event)
+{
+    QString style = QStringLiteral("");
+    if (qApp->styleSheet().isEmpty()) {
+        style = fileCardStyle();
+    }
+    setStyleSheet(style);
+
+    Gui::MDIView::paintEvent(event);
 }
 
 QString StartView::fileCardStyle() const
@@ -435,25 +432,10 @@ void StartView::postStart(PostStartBehavior behavior) const
 
 void StartView::fileCardSelected(const QModelIndex& index)
 {
-    auto file = index.data(static_cast<int>(Start::DisplayedFilesModelRoles::path)).toString();
-    std::string escapedstr = Base::Tools::escapedUnicodeFromUtf8(file.toStdString().c_str());
-    escapedstr = Base::Tools::escapeEncodeFilename(escapedstr);
     try {
-        QString filename = QString::fromStdString(escapedstr);
-        QFileInfo fi(filename);
-        if (!fi.exists() || !fi.isFile()) {
-            QMessageBox::critical(Gui::getMainWindow(),
-                                  tr("File not found"),
-                                  tr("The file '%1' cannot be opened.").arg(filename));
-        }
-        else {
-            // invokes appendFile()
-            Gui::SelectModule::Dict dict = Gui::SelectModule::importHandler(filename);
-            for (Gui::SelectModule::Dict::iterator it = dict.begin(); it != dict.end(); ++it) {
-                Gui::Application::Instance->open(it.key().toUtf8(), it.value().toLatin1());
-                break;
-            }
-        }
+        auto filename =
+            index.data(static_cast<int>(Start::DisplayedFilesModelRoles::path)).toString();
+        Gui::ModuleIO::verifyAndOpenFile(filename);
     }
     catch (Base::PyException& e) {
         Base::Console().Error(e.getMessage().c_str());

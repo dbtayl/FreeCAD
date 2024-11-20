@@ -28,6 +28,7 @@ import Part
 
 from PySide import QtCore
 from PySide.QtCore import QT_TRANSLATE_NOOP
+from collections.abc import Sequence
 
 if App.GuiUp:
     import FreeCADGui as Gui
@@ -511,7 +512,11 @@ class Joint:
             joint.Offset2 = App.Placement(current_offset, App.Rotation(current_rotation, 0, 0))
 
     def migrationScript4(self, joint):
-        if hasattr(joint, "Reference1") and joint.Reference1[0] is not None:
+        if (
+            hasattr(joint, "Reference1")
+            and isinstance(joint.Reference1, Sequence)
+            and joint.Reference1[0] is not None
+        ):
             doc_name = joint.Reference1[0].Document.Name
             sub1 = joint.Reference1[1][0]
             sub1 = UtilsAssembly.fixBodyExtraFeatureInSub(doc_name, sub1)
@@ -521,7 +526,11 @@ class Joint:
             if sub1 != joint.Reference1[1][0] or sub2 != joint.Reference1[1][1]:
                 joint.Reference1 = (joint.Reference1[0], [sub1, sub2])
 
-        if hasattr(joint, "Reference2") and joint.Reference2[0] is not None:
+        if (
+            hasattr(joint, "Reference2")
+            and isinstance(joint.Reference2, Sequence)
+            and joint.Reference2[0] is not None
+        ):
             doc_name = joint.Reference2[0].Document.Name
             sub1 = joint.Reference2[1][0]
             sub1 = UtilsAssembly.fixBodyExtraFeatureInSub(doc_name, sub1)
@@ -918,7 +927,7 @@ class ViewProviderJoint:
             return False
 
         if UtilsAssembly.activeAssembly() != assembly:
-            self.gui_doc.setEdit(assembly)
+            vobj.Document.setEdit(assembly)
 
         panel = TaskAssemblyCreateJoint(0, vobj.Object)
         dialog = Gui.Control.showDialog(panel)
@@ -1213,26 +1222,10 @@ class TaskAssemblyCreateJoint(QtCore.QObject):
         self.jType = JointTypes[self.form.jointType.currentIndex()]
         self.form.jointType.currentIndexChanged.connect(self.onJointTypeChanged)
 
-        self.form.distanceSpinbox.valueChanged.connect(self.onDistanceChanged)
-        self.form.distanceSpinbox2.valueChanged.connect(self.onDistance2Changed)
-        self.form.offsetSpinbox.valueChanged.connect(self.onOffsetChanged)
-        self.form.rotationSpinbox.valueChanged.connect(self.onRotationChanged)
-        self.form.offset1Button.clicked.connect(self.onOffset1Clicked)
-        self.form.offset2Button.clicked.connect(self.onOffset2Clicked)
-
-        self.form.limitCheckbox1.stateChanged.connect(self.adaptUi)
-        self.form.limitCheckbox2.stateChanged.connect(self.adaptUi)
-        self.form.limitCheckbox3.stateChanged.connect(self.adaptUi)
-        self.form.limitCheckbox4.stateChanged.connect(self.adaptUi)
-        self.form.limitLenMinSpinbox.valueChanged.connect(self.onLimitLenMinChanged)
-        self.form.limitLenMaxSpinbox.valueChanged.connect(self.onLimitLenMaxChanged)
-        self.form.limitRotMinSpinbox.valueChanged.connect(self.onLimitRotMinChanged)
-        self.form.limitRotMaxSpinbox.valueChanged.connect(self.onLimitRotMaxChanged)
-
         self.form.reverseRotCheckbox.setChecked(self.jType == "Gears")
         self.form.reverseRotCheckbox.stateChanged.connect(self.reverseRotToggled)
 
-        self.form.offsetTabs.currentChanged.connect(self.on_offset_tab_changed)
+        self.form.advancedOffsetCheckbox.stateChanged.connect(self.advancedOffsetToggled)
 
         if jointObj:
             Gui.Selection.clearSelection()
@@ -1260,6 +1253,34 @@ class TaskAssemblyCreateJoint(QtCore.QObject):
             self.visibilityBackup = False
 
         self.adaptUi()
+
+        self.form.distanceSpinbox.valueChanged.connect(self.onDistanceChanged)
+        self.form.distanceSpinbox2.valueChanged.connect(self.onDistance2Changed)
+        self.form.offsetSpinbox.valueChanged.connect(self.onOffsetChanged)
+        self.form.rotationSpinbox.valueChanged.connect(self.onRotationChanged)
+        bind = Gui.ExpressionBinding(self.form.distanceSpinbox).bind(self.joint, "Distance")
+        bind = Gui.ExpressionBinding(self.form.distanceSpinbox2).bind(self.joint, "Distance2")
+        bind = Gui.ExpressionBinding(self.form.offsetSpinbox).bind(self.joint, "Offset2.Base.z")
+        bind = Gui.ExpressionBinding(self.form.rotationSpinbox).bind(
+            self.joint, "Offset2.Rotation.Yaw"
+        )
+        self.form.offset1Button.clicked.connect(self.onOffset1Clicked)
+        self.form.offset2Button.clicked.connect(self.onOffset2Clicked)
+        self.form.PushButtonReverse.clicked.connect(self.onReverseClicked)
+
+        self.form.limitCheckbox1.stateChanged.connect(self.adaptUi)
+        self.form.limitCheckbox2.stateChanged.connect(self.adaptUi)
+        self.form.limitCheckbox3.stateChanged.connect(self.adaptUi)
+        self.form.limitCheckbox4.stateChanged.connect(self.adaptUi)
+
+        self.form.limitLenMinSpinbox.valueChanged.connect(self.onLimitLenMinChanged)
+        self.form.limitLenMaxSpinbox.valueChanged.connect(self.onLimitLenMaxChanged)
+        self.form.limitRotMinSpinbox.valueChanged.connect(self.onLimitRotMinChanged)
+        self.form.limitRotMaxSpinbox.valueChanged.connect(self.onLimitRotMaxChanged)
+        bind = Gui.ExpressionBinding(self.form.limitLenMinSpinbox).bind(self.joint, "LengthMin")
+        bind = Gui.ExpressionBinding(self.form.limitLenMaxSpinbox).bind(self.joint, "LengthMax")
+        bind = Gui.ExpressionBinding(self.form.limitRotMinSpinbox).bind(self.joint, "AngleMin")
+        bind = Gui.ExpressionBinding(self.form.limitRotMaxSpinbox).bind(self.joint, "AngleMax")
 
         if self.creating:
             # This has to be after adaptUi so that properties default values are adapted
@@ -1297,7 +1318,7 @@ class TaskAssemblyCreateJoint(QtCore.QObject):
         else:
             self.joint.Document.removeObject(self.joint.Name)
 
-        cmds = UtilsAssembly.generatePropertySettings("obj", self.joint)
+        cmds = UtilsAssembly.generatePropertySettings(self.joint)
         Gui.doCommand(cmds)
 
         App.closeActiveTransaction()
@@ -1437,9 +1458,10 @@ class TaskAssemblyCreateJoint(QtCore.QObject):
     def adaptUi(self):
         jType = self.jType
 
-        if jType in JointUsingDistance:
-            self.form.distanceLabel.show()
-            self.form.distanceSpinbox.show()
+        needDistance = jType in JointUsingDistance
+        self.form.distanceLabel.setVisible(needDistance)
+        self.form.distanceSpinbox.setVisible(needDistance)
+        if needDistance:
             if jType == "Distance":
                 self.form.distanceLabel.setText(translate("Assembly", "Distance"))
             elif jType == "Angle":
@@ -1454,19 +1476,10 @@ class TaskAssemblyCreateJoint(QtCore.QObject):
             else:
                 self.form.distanceSpinbox.setProperty("unit", "mm")
 
-        else:
-            self.form.distanceLabel.hide()
-            self.form.distanceSpinbox.hide()
-
-        if jType in JointUsingDistance2:
-            self.form.distanceLabel2.show()
-            self.form.distanceSpinbox2.show()
-            self.form.reverseRotCheckbox.show()
-
-        else:
-            self.form.distanceLabel2.hide()
-            self.form.distanceSpinbox2.hide()
-            self.form.reverseRotCheckbox.hide()
+        needDistance2 = jType in JointUsingDistance2
+        self.form.distanceLabel2.setVisible(needDistance2)
+        self.form.distanceSpinbox2.setVisible(needDistance2)
+        self.form.reverseRotCheckbox.setVisible(needDistance2)
 
         if jType in JointNoNegativeDistance:
             # Setting minimum to 0.01 to prevent 0 and negative values
@@ -1482,68 +1495,52 @@ class TaskAssemblyCreateJoint(QtCore.QObject):
             self.form.distanceSpinbox.setProperty("minimum", float("-inf"))
             self.form.distanceSpinbox2.setProperty("minimum", float("-inf"))
 
-        if jType in JointUsingOffset:
-            self.form.offsetLabel.show()
-            self.form.offsetSpinbox.show()
-        else:
-            self.form.offsetLabel.hide()
-            self.form.offsetSpinbox.hide()
+        advancedOffset = self.form.advancedOffsetCheckbox.isChecked()
+        needOffset = jType in JointUsingOffset
+        needRotation = jType in JointUsingRotation
+        self.form.offset1Label.setVisible(advancedOffset)
+        self.form.offset2Label.setVisible(advancedOffset)
+        self.form.offset1Button.setVisible(advancedOffset)
+        self.form.offset2Button.setVisible(advancedOffset)
+        self.form.offsetLabel.setVisible(not advancedOffset and needOffset)
+        self.form.offsetSpinbox.setVisible(not advancedOffset and needOffset)
+        self.form.rotationLabel.setVisible(not advancedOffset and needRotation)
+        self.form.rotationSpinbox.setVisible(not advancedOffset and needRotation)
 
-        if jType in JointUsingRotation:
-            self.form.rotationLabel.show()
-            self.form.rotationSpinbox.show()
-        else:
-            self.form.rotationLabel.hide()
-            self.form.rotationSpinbox.hide()
-
-        if jType in JointUsingReverse:
-            self.form.PushButtonReverse.show()
-        else:
-            self.form.PushButtonReverse.hide()
+        self.form.PushButtonReverse.setVisible(jType in JointUsingReverse)
 
         needLengthLimits = jType in JointUsingLimitLength
         needAngleLimits = jType in JointUsingLimitAngle
+        needLimits = needLengthLimits or needAngleLimits
+        self.form.groupBox_limits.setVisible(needLimits)
 
-        if needLengthLimits or needAngleLimits:
-            self.form.groupBox_limits.show()
-
+        if needLimits:
             self.joint.EnableLengthMin = self.form.limitCheckbox1.isChecked()
             self.joint.EnableLengthMax = self.form.limitCheckbox2.isChecked()
             self.joint.EnableAngleMin = self.form.limitCheckbox3.isChecked()
             self.joint.EnableAngleMax = self.form.limitCheckbox4.isChecked()
 
+            self.form.limitCheckbox1.setVisible(needLengthLimits)
+            self.form.limitCheckbox2.setVisible(needLengthLimits)
+            self.form.limitLenMinSpinbox.setVisible(needLengthLimits)
+            self.form.limitLenMaxSpinbox.setVisible(needLengthLimits)
+
+            self.form.limitCheckbox3.setVisible(needAngleLimits)
+            self.form.limitCheckbox4.setVisible(needAngleLimits)
+            self.form.limitRotMinSpinbox.setVisible(needAngleLimits)
+            self.form.limitRotMaxSpinbox.setVisible(needAngleLimits)
+
             if needLengthLimits:
-                self.form.limitCheckbox1.show()
-                self.form.limitCheckbox2.show()
-                self.form.limitLenMinSpinbox.show()
-                self.form.limitLenMaxSpinbox.show()
                 self.form.limitLenMinSpinbox.setEnabled(self.joint.EnableLengthMin)
                 self.form.limitLenMaxSpinbox.setEnabled(self.joint.EnableLengthMax)
                 self.onLimitLenMinChanged(0)  # dummy value
                 self.onLimitLenMaxChanged(0)
-            else:
-                self.form.limitCheckbox1.hide()
-                self.form.limitCheckbox2.hide()
-                self.form.limitLenMinSpinbox.hide()
-                self.form.limitLenMaxSpinbox.hide()
 
             if needAngleLimits:
-                self.form.limitCheckbox3.show()
-                self.form.limitCheckbox4.show()
-                self.form.limitRotMinSpinbox.show()
-                self.form.limitRotMaxSpinbox.show()
                 self.form.limitRotMinSpinbox.setEnabled(self.joint.EnableAngleMin)
                 self.form.limitRotMaxSpinbox.setEnabled(self.joint.EnableAngleMax)
                 self.onLimitRotMinChanged(0)
                 self.onLimitRotMaxChanged(0)
-            else:
-                self.form.limitCheckbox3.hide()
-                self.form.limitCheckbox4.hide()
-                self.form.limitRotMinSpinbox.hide()
-                self.form.limitRotMaxSpinbox.hide()
-
-        else:
-            self.form.groupBox_limits.hide()
 
         self.updateOffsetWidgets()
 
@@ -1562,7 +1559,8 @@ class TaskAssemblyCreateJoint(QtCore.QObject):
         )
         self.blockOffsetRotation = False
 
-    def on_offset_tab_changed(self):
+    def advancedOffsetToggled(self, on):
+        self.adaptUi()
         self.updateOffsetWidgets()
 
     def onOffset1Clicked(self):
@@ -1630,16 +1628,28 @@ class TaskAssemblyCreateJoint(QtCore.QObject):
         needAngleLimits = self.jType in JointUsingLimitAngle
         if needLengthLimits:
             distance = UtilsAssembly.getJointDistance(self.joint)
-            if not self.form.limitCheckbox1.isChecked():
+            if (
+                not self.form.limitCheckbox1.isChecked()
+                and self.form.limitLenMinSpinbox.property("expression") == ""
+            ):
                 self.form.limitLenMinSpinbox.setProperty("rawValue", distance)
-            if not self.form.limitCheckbox2.isChecked():
+            if (
+                not self.form.limitCheckbox2.isChecked()
+                and self.form.limitLenMaxSpinbox.property("expression") == ""
+            ):
                 self.form.limitLenMaxSpinbox.setProperty("rawValue", distance)
 
         if needAngleLimits:
             angle = UtilsAssembly.getJointXYAngle(self.joint) / math.pi * 180
-            if not self.form.limitCheckbox3.isChecked():
+            if (
+                not self.form.limitCheckbox3.isChecked()
+                and self.form.limitRotMinSpinbox.property("expression") == ""
+            ):
                 self.form.limitRotMinSpinbox.setProperty("rawValue", angle)
-            if not self.form.limitCheckbox4.isChecked():
+            if (
+                not self.form.limitCheckbox4.isChecked()
+                and self.form.limitRotMaxSpinbox.property("expression") == ""
+            ):
                 self.form.limitRotMaxSpinbox.setProperty("rawValue", angle)
 
     def moveMouse(self, info):
